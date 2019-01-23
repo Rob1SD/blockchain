@@ -1,5 +1,5 @@
 function getTurn() {
-    return 2;
+    return 3;
 }
 
 function getOriginelCandidates() {
