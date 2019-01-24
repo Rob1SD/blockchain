@@ -1,20 +1,37 @@
+var myContract;
+
 function getTurn() {
-    return 3;
+    return 2;
 }
 
 function getOriginelCandidates() {
-    var candidates = [1, 2, 3, 4];
-    return candidates;
+    var candidates = [];
+    return myContract.methods.getNumOfCandidates().call().then((result) => {
+        for(var i = 1; i <= result; i++) {
+            candidates.push(i);
+        }
+        return candidates;
+    });
 }
 
 function getSecondTurnCandidates(results) {
-    var candidates = [2, 3];
-    return candidates;
+    return getOriginelCandidates();
 }
 
 function getResultsFirstTurn() {
-    var resultFirst = { 1 : 1, 2 : 40, 3: 20, 4 : 1 };
-    return resultFirst;
+    return getOriginelCandidates().then((candidates) => {
+        var promises = []
+        for(var i = 1; i <= candidates.length; i++) {
+            promises.push(myContract.methods.totalVotes(i).call());
+        }
+        return Promise.all(promises).then(function(values) {
+            var dict = {};
+            for(var j = 0; j < values.length; j++) {
+                dict[j + 1] = values[j];
+            }
+            return dict;
+        });
+    });
 }
 
 function getResultsSecondTurn() {
@@ -26,11 +43,16 @@ function fillResultsFirstTurn(results) {
     var tot = 0;
 
     for (var property in results) {
-        tot += results[property];
+        tot += parseInt(results[property]);
     }
-
+    
     for (var property in results) {
-        $("#firstTurn").append(`<tr><td>${property}</td><td>${results[property]}</td><td>${results[property] * 100 / tot}</td></tr>`)
+        if(tot == 0 || results[property] == 0) {
+            $("#firstTurn").append(`<tr><td>${property}</td><td>${results[property]}</td><td>0%</td></tr>`) 
+        }
+        else {
+            $("#firstTurn").append(`<tr><td>${property}</td><td>${results[property]}</td><td>${results[property] * 100 / tot}%</td></tr>`)
+        }
     }
 }
 
@@ -80,32 +102,56 @@ function fillResultsSecondTurn(results) {
 }
 
 function fillCandidates(candidates) {
-    console.log(candidates);
     for (var property in candidates) {
-        $("#toVote").append(`<tr><td>${property}</td><td><a name="votefor-${property}" class="btn btn-outline-info my-2 my-sm-0 votefor"  role="button">vote</a></td></tr>`)
+        $("#toVote").append(`<tr><td>${candidates[property]}</td><td><a class="btn btn-outline-info my-2 my-sm-0 votefor" role="button" onclick="vote(${candidates[property]})">vote</a></td></tr>`)
     }   
 }
 
+function addCandidate(i) {
+    myContract.methods.addCandidate(i).send({ from: web3.eth.defaultAccount }).then((result) => {
+        console.log(result);
+    }).catch(function(err){
+        console.log('err...\n'+err);
+    });   
+}
+
+function vote(i) {
+    myContract.methods.vote(web3.eth.defaultAccount, i).send({ from: web3.eth.defaultAccount }).then((result) => {
+       console.log(result); 
+    });
+}
+
 $(document).ready(function(){
+    if (typeof web3 !== 'undefined') {
+        web3js = new Web3(web3.currentProvider);
+    } else {
+        console.log("no web3js");
+        return;
+    }
+    myContract = new web3js.eth.Contract(votingABI, contraAddresse);
+
     var page = $("#page").val();
     var turn = getTurn();
 
     switch (turn) {
         case 1:
             if (page == "vote") {
-                var candidates = getOriginelCandidates();
-                fillCandidates(candidates);
+                getOriginelCandidates().then((candidates) => {
+                    fillCandidates(candidates); 
+                });
             }
             break;
         case 2:
             if (page == "vote") {
-                var candidates = getSecondTurnCandidates();
-                fillCandidates(candidates);
+                getSecondTurnCandidates().then((candidates) => {
+                    fillCandidates(candidates); 
+                });
             }
             else if (page == "results") {
-                var results = getResultsFirstTurn();
-                fillResultsFirstTurn(results);
-                fillWinnerFirstTurn(results);
+                getResultsFirstTurn().then((results) => {
+                    fillResultsFirstTurn(results);
+                    fillWinnerFirstTurn(results); 
+                });
             }
             break;
         case 3:
@@ -119,9 +165,4 @@ $(document).ready(function(){
             }
             break;
     }
-
-    $(".votefor").click(function(){
-        var voted = $(this)[0].name.split('-')[1];
-        console.log(voted);
-    });
 });
